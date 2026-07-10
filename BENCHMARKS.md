@@ -27,6 +27,45 @@ illustrative — re-run on your target):
 canonicalisation of the value plus a direct structural walk. There is no
 per-check parsing — parse once, check many.
 
+## Measured results — real hardware (2026-07-10)
+
+The Go benchmarks above and the equivalent MRI `Puppet::Pops::Types` operations
+were run on the **same host** over the **identical** corpus (the ten
+`benchExprs`, the `Struct`/hash instance check, the `Hash ⊇ Struct` assignability
+check and the mixed-array `Infer`). MRI drives `TypeParser.singleton.parse`,
+`TypeCalculator.singleton.instance?` / `.assignable?` / `.infer` under
+`Benchmark.realtime` after a warm-up. Measured on two real, non-x86 arches.
+
+| Arch | Host | CPU | Go | Ruby (MRI) | puppet |
+|------|------|-----|----|-----------|--------|
+| `s390x` | LinuxONE | IBM z15 (8561), 2 vCPU | go1.26.4 | 3.2.3 | 8.10.0 |
+| `riscv64` | cfarm95 (GCC farm) | SpacemiT X60 (rv64gcv), 8 core | go1.26.4 | 3.3.8 | 8.10.0 |
+
+### s390x (IBM z15, LinuxONE)
+
+| Benchmark | Go ns/op | MRI `Pops::Types` ns/op | ratio (MRI ÷ Go) |
+|-----------|---------:|------------------------:|-----------------:|
+| `Parse` (10 exprs) | 18 858 | 880 803 | **46.7× faster** |
+| `IsInstance` (Struct over hash) | 199 | 1 189 | **5.98× faster** |
+| `IsAssignable` (Hash ⊇ Struct) | 1 619 | 3 906 | **2.41× faster** |
+| `Infer` (mixed array) | 2 004 | 17 175 | **8.57× faster** |
+
+### riscv64 (SpacemiT X60, cfarm95)
+
+| Benchmark | Go ns/op | MRI `Pops::Types` ns/op | ratio (MRI ÷ Go) |
+|-----------|---------:|------------------------:|-----------------:|
+| `Parse` (10 exprs) | 262 342 | 13 114 635 | **50.0× faster** |
+| `IsInstance` (Struct over hash) | 1 586 | 8 333 | **5.25× faster** |
+| `IsAssignable` (Hash ⊇ Struct) | 12 594 | 29 238 | **2.32× faster** |
+| `Infer` (mixed array) | 14 419 | 188 751 | **13.1× faster** |
+
+Go is **at least as fast as — in every case comfortably faster than — the
+reference** on all four hot paths, on both real architectures. The gap is
+largest on type **parsing** (~47–50×), where MRI builds a full Pops AST + type
+factory per expression, and narrowest on `IsAssignable`, the most
+allocation-heavy Go path (27 allocs/op). The standing "≥ reference" rule is
+satisfied.
+
 ## Differential oracle vs MRI Puppet
 
 The reference implementation is the Ruby `puppet` gem. The harness parses the
