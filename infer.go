@@ -25,9 +25,15 @@ func Infer(v Value) Type {
 	case *Binary:
 		return &binaryType{}
 	case *Timestamp:
-		return &timestampType{}
+		n := x.t.UnixNano()
+		return &timestampType{min: n, max: n}
 	case *Timespan:
-		return &timespanType{}
+		n := int64(x.d)
+		return &timespanType{min: n, max: n}
+	case *SemVer:
+		return &semVerType{}
+	case *SemVerRange:
+		return &semVerRangeType{}
 	case *Sensitive:
 		return &sensitiveType{typ: Infer(x.inner)}
 	case Type:

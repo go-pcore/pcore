@@ -27,8 +27,14 @@ type booleanType struct{}
 type undefType struct{}
 type defaultTypeT struct{}
 type binaryType struct{}
-type timestampType struct{}
-type timespanType struct{}
+
+// timestampType is Timestamp[from, to]. Bounds are Unix nanoseconds; minInt /
+// maxInt mark the open (default) ends.
+type timestampType struct{ min, max int64 }
+
+// timespanType is Timespan[from, to]. Bounds are nanoseconds; minInt / maxInt
+// mark the open (default) ends.
+type timespanType struct{ min, max int64 }
 
 type integerType struct{ min, max int64 }
 type floatType struct{ min, max float64 }
@@ -111,13 +117,15 @@ func NewOptional(typ Type) Type { return &optionalType{typ: typ} }
 func AnyT() Type       { return &anyType{} }
 func ScalarT() Type    { return &scalarType{} }
 func DataT() Type      { return &dataType{} }
+func RichDataT() Type  { return &richDataType{} }
 func BooleanT() Type   { return &booleanType{} }
 func UndefT() Type     { return &undefType{} }
 func DefaultT() Type   { return &defaultTypeT{} }
 func NumericT() Type   { return &numericType{} }
 func BinaryT() Type    { return &binaryType{} }
-func TimestampT() Type { return &timestampType{} }
-func TimespanT() Type  { return &timespanType{} }
+func TimestampT() Type { return &timestampType{min: minInt, max: maxInt} }
+func TimespanT() Type  { return &timespanType{min: minInt, max: maxInt} }
+func SemVerT() Type    { return &semVerType{} }
 
 // Name methods ---------------------------------------------------------------
 
@@ -130,8 +138,8 @@ func (booleanType) Name() string     { return "Boolean" }
 func (undefType) Name() string       { return "Undef" }
 func (defaultTypeT) Name() string    { return "Default" }
 func (binaryType) Name() string      { return "Binary" }
-func (timestampType) Name() string   { return "Timestamp" }
-func (timespanType) Name() string    { return "Timespan" }
+func (*timestampType) Name() string  { return "Timestamp" }
+func (*timespanType) Name() string   { return "Timespan" }
 func (*integerType) Name() string    { return "Integer" }
 func (*floatType) Name() string      { return "Float" }
 func (*stringType) Name() string     { return "String" }
@@ -160,8 +168,6 @@ func (booleanType) String() string    { return "Boolean" }
 func (undefType) String() string      { return "Undef" }
 func (defaultTypeT) String() string   { return "Default" }
 func (binaryType) String() string     { return "Binary" }
-func (timestampType) String() string  { return "Timestamp" }
-func (timespanType) String() string   { return "Timespan" }
 
 func (t *integerType) String() string {
 	if t.min == minInt && t.max == maxInt {

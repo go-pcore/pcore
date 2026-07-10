@@ -26,8 +26,11 @@ func TestInfer(t *testing.T) {
 		{NewHash(HashEntry{"a", int64(1)}), "Hash[String[1, 1], Integer[1, 1], 1, 1]"},
 		{reAB, "Regexp[/ab/]"},
 		{NewBinary([]byte{1}), "Binary"},
-		{NewTimestamp(time.Unix(0, 0)), "Timestamp"},
-		{NewTimespan(time.Second), "Timespan"},
+		// Puppet infers the exact instant/duration as both range bounds.
+		{NewTimestamp(time.Unix(0, 0)), "Timestamp['1970-01-01T00:00:00Z', '1970-01-01T00:00:00Z']"},
+		{NewTimespan(time.Second), "Timespan['1s', '1s']"},
+		{mustSemVer(t, "1.2.3"), "SemVer"},
+		{mustSemVerRange(t, ">=1.0.0"), "SemVerRange"},
 		{NewSensitive("x"), "Sensitive[String[1, 1]]"},
 		{NewInteger(1, 3), "Type[Integer[1, 3]]"},
 		{make(chan int), "Any"},

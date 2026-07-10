@@ -257,6 +257,15 @@ func equalValue(a, b Value) bool {
 	case *Timespan:
 		y, ok := b.(*Timespan)
 		return ok && x.d == y.d
+	case *SemVer:
+		y, ok := b.(*SemVer)
+		return ok && x.String() == y.String()
+	case *SemVerRange:
+		y, ok := b.(*SemVerRange)
+		return ok && x.String() == y.String()
+	case *URI:
+		y, ok := b.(*URI)
+		return ok && x.uri == y.uri
 	case *Sensitive:
 		y, ok := b.(*Sensitive)
 		return ok && equalValue(x.inner, y.inner)
