@@ -4,13 +4,14 @@
 //
 // It provides four things a Puppet-family tool needs:
 //
-//   - a Type model covering the Pcore type calculus (scalar, collection,
-//     abstract and a handful of rich data types);
-//   - a Type parser, [Type], turning a Pcore type expression such as
-//     "Variant[Integer[0,10], Enum['a','b']]" into a [Type];
-//   - a value model — plain Go values for scalars and collections plus a few
-//     wrappers ([Undef], [Default], [Sensitive], [Regexp], [Binary],
-//     [Timestamp], [Timespan]);
+//   - a Type model covering the full Pcore type calculus — scalar, collection,
+//     abstract, rich-data and nominal types, recursive type aliases and TypeSet;
+//   - a [Parse] function turning a Pcore type expression such as
+//     "Variant[Integer[0,10], Enum['a','b']]" into a [Type], plus a [Loader]
+//     type environment for named/recursive aliases and TypeSet resolution;
+//   - a value model — plain Go values for scalars and collections plus wrappers
+//     ([Undef], [Default], [Sensitive], [Regexp], [Binary], [Timestamp],
+//     [Timespan], [SemVer], [SemVerRange], [URI], [ObjectValue] and friends);
 //   - the load-bearing operations: [IsInstance] (value ∈ type),
 //     [IsAssignable] (subtype), [Infer] (a value's most specific type),
 //     [Generalize], [CommonType], and the rich-data [ToData]/[FromData]
@@ -39,12 +40,16 @@ type Type interface {
 	// Type(t.String()) reproduces t.
 	String() string
 
-	isInstance(v Value) bool
-	isAssignable(other Type) bool
+	// isInstance answers whether v is an instance of the receiver. g carries the
+	// co-inductive recursion guard used to terminate recursive type aliases.
+	isInstance(v Value, g *guard) bool
+	// isAssignable answers whether other is a subtype of the receiver. g carries
+	// the co-inductive recursion guard used to terminate recursive type aliases.
+	isAssignable(other Type, g *guard) bool
 }
 
 // IsInstance reports whether v is an instance of t.
-func IsInstance(t Type, v Value) bool { return t.isInstance(canon(v)) }
+func IsInstance(t Type, v Value) bool { return t.isInstance(canon(v), newGuard()) }
 
 // IsAssignable reports whether b is a subtype of a, i.e. every instance of b is
 // an instance of a. It is the core lattice operation.

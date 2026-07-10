@@ -1,37 +1,41 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright the go-pcore/pcore authors.
+
 package pcore
 
 import "strings"
 
 // isInstance answers whether the canonical value v is an instance of the type.
+// The guard g terminates recursion through recursive type aliases.
 
-func (anyType) isInstance(Value) bool { return true }
+func (anyType) isInstance(Value, *guard) bool { return true }
 
-func (undefType) isInstance(v Value) bool {
+func (undefType) isInstance(v Value, _ *guard) bool {
 	_, ok := v.(undefValue)
 	return ok
 }
 
-func (defaultTypeT) isInstance(v Value) bool {
+func (defaultTypeT) isInstance(v Value, _ *guard) bool {
 	_, ok := v.(defaultValue)
 	return ok
 }
 
-func (booleanType) isInstance(v Value) bool {
+func (booleanType) isInstance(v Value, _ *guard) bool {
 	_, ok := v.(bool)
 	return ok
 }
 
-func (t *integerType) isInstance(v Value) bool {
+func (t *integerType) isInstance(v Value, _ *guard) bool {
 	i, ok := v.(int64)
 	return ok && i >= t.min && i <= t.max
 }
 
-func (t *floatType) isInstance(v Value) bool {
+func (t *floatType) isInstance(v Value, _ *guard) bool {
 	f, ok := v.(float64)
 	return ok && f >= t.min && f <= t.max
 }
 
-func (numericType) isInstance(v Value) bool {
+func (numericType) isInstance(v Value, _ *guard) bool {
 	switch v.(type) {
 	case int64, float64:
 		return true
@@ -40,7 +44,7 @@ func (numericType) isInstance(v Value) bool {
 	}
 }
 
-func (t *stringType) isInstance(v Value) bool {
+func (t *stringType) isInstance(v Value, _ *guard) bool {
 	s, ok := v.(string)
 	if !ok {
 		return false
@@ -49,7 +53,7 @@ func (t *stringType) isInstance(v Value) bool {
 	return n >= t.minLen && n <= t.maxLen
 }
 
-func (t *enumType) isInstance(v Value) bool {
+func (t *enumType) isInstance(v Value, _ *guard) bool {
 	s, ok := v.(string)
 	if !ok {
 		return false
@@ -62,7 +66,7 @@ func (t *enumType) isInstance(v Value) bool {
 	return false
 }
 
-func (t *patternType) isInstance(v Value) bool {
+func (t *patternType) isInstance(v Value, _ *guard) bool {
 	s, ok := v.(string)
 	if !ok {
 		return false
@@ -75,7 +79,7 @@ func (t *patternType) isInstance(v Value) bool {
 	return false
 }
 
-func (t *regexpType) isInstance(v Value) bool {
+func (t *regexpType) isInstance(v Value, _ *guard) bool {
 	r, ok := v.(*Regexp)
 	if !ok {
 		return false
@@ -83,7 +87,7 @@ func (t *regexpType) isInstance(v Value) bool {
 	return t.pattern == nil || t.pattern.src == r.src
 }
 
-func (scalarDataType) isInstance(v Value) bool {
+func (scalarDataType) isInstance(v Value, _ *guard) bool {
 	switch v.(type) {
 	case int64, float64, string, bool:
 		return true
@@ -92,16 +96,16 @@ func (scalarDataType) isInstance(v Value) bool {
 	}
 }
 
-func (scalarType) isInstance(v Value) bool {
+func (scalarType) isInstance(v Value, _ *guard) bool {
 	switch v.(type) {
-	case int64, float64, string, bool, *Regexp, *Timestamp, *Timespan:
+	case int64, float64, string, bool, *Regexp, *Timestamp, *Timespan, *SemVer:
 		return true
 	default:
 		return false
 	}
 }
 
-func (dataType) isInstance(v Value) bool {
+func (dataType) isInstance(v Value, g *guard) bool {
 	switch x := v.(type) {
 	case int64, float64, string, bool:
 		return true
@@ -109,7 +113,7 @@ func (dataType) isInstance(v Value) bool {
 		return true
 	case []Value:
 		for _, e := range x {
-			if !dataInstance(e) {
+			if !dataType.isInstance(dataType{}, e, g) {
 				return false
 			}
 		}
@@ -119,7 +123,7 @@ func (dataType) isInstance(v Value) bool {
 			if _, ok := e.Key.(string); !ok {
 				return false
 			}
-			if !dataInstance(e.Value) {
+			if !dataType.isInstance(dataType{}, e.Value, g) {
 				return false
 			}
 		}
@@ -129,9 +133,52 @@ func (dataType) isInstance(v Value) bool {
 	}
 }
 
-func dataInstance(v Value) bool { return dataType{}.isInstance(v) }
+func (t *richDataType) isInstance(v Value, g *guard) bool {
+	switch x := v.(type) {
+	case []Value:
+		for _, e := range x {
+			if !t.isInstance(e, g) {
+				return false
+			}
+		}
+		return true
+	case *Hash:
+		for _, e := range x.entries {
+			if !(&richDataKeyType{}).isInstance(e.Key, g) {
+				return false
+			}
+			if !t.isInstance(e.Value, g) {
+				return false
+			}
+		}
+		return true
+	default:
+		return richDataLeaf(v)
+	}
+}
 
-func (t *collectionType) isInstance(v Value) bool {
+// richDataLeaf reports whether v is a non-collection value RichData admits.
+func richDataLeaf(v Value) bool {
+	switch v.(type) {
+	case int64, float64, string, bool, undefValue, defaultValue,
+		*Regexp, *Binary, *Timestamp, *Timespan, *SemVer, *SemVerRange,
+		*Sensitive, Type:
+		return true
+	default:
+		return false
+	}
+}
+
+func (richDataKeyType) isInstance(v Value, _ *guard) bool {
+	switch v.(type) {
+	case string, int64, float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *collectionType) isInstance(v Value, _ *guard) bool {
 	if n, ok := collectionLen(v); ok {
 		return n >= t.minSz && n <= t.maxSz
 	}
@@ -150,7 +197,7 @@ func collectionLen(v Value) (int64, bool) {
 	}
 }
 
-func (t *arrayType) isInstance(v Value) bool {
+func (t *arrayType) isInstance(v Value, g *guard) bool {
 	a, ok := v.([]Value)
 	if !ok {
 		return false
@@ -160,14 +207,14 @@ func (t *arrayType) isInstance(v Value) bool {
 		return false
 	}
 	for _, e := range a {
-		if !t.element.isInstance(e) {
+		if !t.element.isInstance(e, g) {
 			return false
 		}
 	}
 	return true
 }
 
-func (t *tupleType) isInstance(v Value) bool {
+func (t *tupleType) isInstance(v Value, g *guard) bool {
 	a, ok := v.([]Value)
 	if !ok {
 		return false
@@ -177,7 +224,7 @@ func (t *tupleType) isInstance(v Value) bool {
 		return false
 	}
 	for i, e := range a {
-		if !t.typeAt(i).isInstance(e) {
+		if !t.typeAt(i).isInstance(e, g) {
 			return false
 		}
 	}
@@ -192,7 +239,7 @@ func (t *tupleType) typeAt(i int) Type {
 	return t.types[len(t.types)-1]
 }
 
-func (t *hashType) isInstance(v Value) bool {
+func (t *hashType) isInstance(v Value, g *guard) bool {
 	entries, ok := hashEntriesOf(v)
 	if !ok {
 		return false
@@ -202,14 +249,14 @@ func (t *hashType) isInstance(v Value) bool {
 		return false
 	}
 	for _, e := range entries {
-		if !t.key.isInstance(e.Key) || !t.value.isInstance(e.Value) {
+		if !t.key.isInstance(e.Key, g) || !t.value.isInstance(e.Value, g) {
 			return false
 		}
 	}
 	return true
 }
 
-func (t *structType) isInstance(v Value) bool {
+func (t *structType) isInstance(v Value, g *guard) bool {
 	entries, ok := hashEntriesOf(v)
 	if !ok {
 		return false
@@ -230,7 +277,7 @@ func (t *structType) isInstance(v Value) bool {
 			}
 			return false
 		}
-		if !m.typ.isInstance(val) {
+		if !m.typ.isInstance(val, g) {
 			return false
 		}
 		delete(seen, m.name)
@@ -242,60 +289,68 @@ func (t *structType) isInstance(v Value) bool {
 // optional reports whether the member may be absent from a matching hash.
 func (m structMember) optional() bool { return m.keyOpt || acceptsUndef(m.typ) }
 
-func (t *variantType) isInstance(v Value) bool {
+func (t *variantType) isInstance(v Value, g *guard) bool {
 	for _, m := range t.types {
-		if m.isInstance(v) {
+		if m.isInstance(v, g) {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *optionalType) isInstance(v Value) bool {
+func (t *optionalType) isInstance(v Value, g *guard) bool {
 	if _, ok := v.(undefValue); ok {
 		return true
 	}
-	return t.typ.isInstance(v)
+	return t.typ.isInstance(v, g)
 }
 
-func (t *notUndefType) isInstance(v Value) bool {
+func (t *notUndefType) isInstance(v Value, g *guard) bool {
 	if _, ok := v.(undefValue); ok {
 		return false
 	}
-	return t.typ.isInstance(v)
+	return t.typ.isInstance(v, g)
 }
 
-func (t *typeType) isInstance(v Value) bool {
+func (t *typeType) isInstance(v Value, g *guard) bool {
 	ty, ok := v.(Type)
 	if !ok {
 		return false
 	}
-	return assignable(t.typ, ty)
+	return asg(t.typ, ty, g)
 }
 
-func (t *sensitiveType) isInstance(v Value) bool {
+func (t *sensitiveType) isInstance(v Value, g *guard) bool {
 	s, ok := v.(*Sensitive)
 	if !ok {
 		return false
 	}
-	return t.typ.isInstance(s.inner)
+	return t.typ.isInstance(s.inner, g)
 }
 
-func (binaryType) isInstance(v Value) bool {
+func (binaryType) isInstance(v Value, _ *guard) bool {
 	_, ok := v.(*Binary)
 	return ok
 }
 
-func (timestampType) isInstance(v Value) bool {
-	_, ok := v.(*Timestamp)
-	return ok
+func (t *timestampType) isInstance(v Value, _ *guard) bool {
+	ts, ok := v.(*Timestamp)
+	if !ok {
+		return false
+	}
+	n := ts.t.UnixNano()
+	return n >= t.min && n <= t.max
 }
 
-func (timespanType) isInstance(v Value) bool {
-	_, ok := v.(*Timespan)
-	return ok
+func (t *timespanType) isInstance(v Value, _ *guard) bool {
+	ts, ok := v.(*Timespan)
+	if !ok {
+		return false
+	}
+	n := int64(ts.d)
+	return n >= t.min && n <= t.max
 }
 
 // acceptsUndef reports whether the undef value is an instance of t. Used both
 // for Struct optionality and for the NotUndef assignability rule.
-func acceptsUndef(t Type) bool { return t.isInstance(Undef) }
+func acceptsUndef(t Type) bool { return t.isInstance(Undef, newGuard()) }

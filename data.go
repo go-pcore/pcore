@@ -45,6 +45,12 @@ func ToData(v Value) (Value, error) {
 		return tagged("Timestamp", x.t.UTC().Format(time.RFC3339Nano)), nil
 	case *Timespan:
 		return tagged("Timespan", x.d.String()), nil
+	case *SemVer:
+		return tagged("SemVer", x.String()), nil
+	case *SemVerRange:
+		return tagged("SemVerRange", x.String()), nil
+	case *URI:
+		return tagged("URI", x.uri), nil
 	case *Sensitive:
 		return tagged("Sensitive", nil), nil // redacted
 	case Type:
@@ -192,6 +198,24 @@ func reconstruct(ptype string, pv Value) (Value, error) {
 			return nil, fmt.Errorf("pcore: invalid Timespan: %w", err)
 		}
 		return NewTimespan(d), nil
+	case "SemVer":
+		s, err := needString(ptype, pv)
+		if err != nil {
+			return nil, err
+		}
+		return NewSemVer(s)
+	case "SemVerRange":
+		s, err := needString(ptype, pv)
+		if err != nil {
+			return nil, err
+		}
+		return NewSemVerRange(s)
+	case "URI":
+		s, err := needString(ptype, pv)
+		if err != nil {
+			return nil, err
+		}
+		return NewURI(s), nil
 	case "Type":
 		s, err := needString(ptype, pv)
 		if err != nil {

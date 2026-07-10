@@ -22,10 +22,32 @@ func buildType(name string, params []param, p *parser) (Type, error) {
 		return nullary(name, params, p, &booleanType{})
 	case "Binary":
 		return nullary(name, params, p, &binaryType{})
+	case "RichData":
+		return nullary(name, params, p, &richDataType{})
+	case "RichDataKey":
+		return nullary(name, params, p, &richDataKeyType{})
+	case "SemVerRange":
+		return nullary(name, params, p, &semVerRangeType{})
 	case "Timestamp":
-		return nullary(name, params, p, &timestampType{})
+		return buildTimestamp(params, p)
 	case "Timespan":
-		return nullary(name, params, p, &timespanType{})
+		return buildTimespan(params, p)
+	case "SemVer":
+		return buildSemVer(params, p)
+	case "Init":
+		return buildInit(params, p)
+	case "Runtime":
+		return buildRuntime(params, p)
+	case "URI":
+		return buildURI(params, p)
+	case "Iterable":
+		return buildIterable(params, p)
+	case "Iterator":
+		return buildIterator(params, p)
+	case "Error":
+		return buildError(params, p)
+	case "Callable":
+		return buildCallable(params, p)
 	case "Integer":
 		return buildInteger(params, p)
 	case "Float":
@@ -59,6 +81,12 @@ func buildType(name string, params []param, p *parser) (Type, error) {
 	case "Sensitive":
 		return buildWrapper(name, params, p, func(t Type) Type { return &sensitiveType{typ: t} })
 	default:
+		if p.loader != nil && isTypeName(name) {
+			if len(params) != 0 {
+				return nil, &ParseError{Msg: "type alias " + name + " cannot take parameters", Pos: 0}
+			}
+			return p.loader.ref(name), nil
+		}
 		return nil, &ParseError{Msg: "unknown type " + name, Pos: 0}
 	}
 }

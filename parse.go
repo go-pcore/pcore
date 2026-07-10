@@ -292,8 +292,9 @@ type param struct {
 }
 
 type parser struct {
-	toks []token
-	i    int
+	toks   []token
+	i      int
+	loader *Loader // type-alias scope, or nil for the package-level Parse
 }
 
 func (p *parser) cur() token { return p.toks[p.i] }
@@ -316,6 +317,12 @@ func (p *parser) parseType() (Type, error) {
 	}
 	name := p.cur().text
 	p.advance()
+	if name == "TypeSet" {
+		return p.parseTypeSet()
+	}
+	if name == "Object" {
+		return p.parseObject()
+	}
 	var params []param
 	if p.cur().kind == tLBrack {
 		var err error
